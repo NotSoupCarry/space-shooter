@@ -77,8 +77,8 @@ class Animator:
         frames.append(renderer.render_frame())
 
         # Process each action from the strategy
-        for action in self.strategy.generate_actions(self.contribution_data):
-            game_state.ship.move_to(action.week)
+        for action in self.strategy.generate_actions(game_state):
+            game_state.ship.move_to(action.x)
             while game_state.can_take_action() is False:
                 game_state.animate()
                 frames.append(renderer.render_frame())
@@ -91,6 +91,7 @@ class Animator:
         # Add final frames showing completion
         while not game_state.is_complete():
             game_state.animate()
+            frames.append(renderer.render_frame())
         for _ in range(5):
             frames.append(renderer.render_frame())
 

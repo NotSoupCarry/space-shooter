@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, List
 
 from PIL import ImageDraw
 
-from ..constants import BULLET_SPEED, NUM_DAYS, NUM_WEEKS, SHIP_POSITION_Y, SHIP_SPEED
+from ..constants import BULLET_SPEED, NUM_DAYS, NUM_WEEKS, SHIP_POSITION_Y, SHIP_SHOOT_COOLDOWN_FRAMES, SHIP_SPEED
 from ..github_client import ContributionData
 
 if TYPE_CHECKING:
@@ -123,6 +123,7 @@ class Ship(Drawable):
         """Initialize the ship at starting position."""
         self.x: float = 25  # Start middle of screen
         self.target_x = self.x
+        self.shoot_cooldown = 0  # Frames until ship can shoot again
         self.game_state = game_state
 
     def move_to(self, x: int):
@@ -138,12 +139,20 @@ class Ship(Drawable):
         """Check if ship is moving to a new position."""
         return self.x != self.target_x
 
+    def can_shoot(self) -> bool:
+        """Check if ship can shoot (cooldown has finished)."""
+        return self.shoot_cooldown == 0
+
     def animate(self) -> None:
         """Update ship position, moving toward target at constant speed."""
         if self.x < self.target_x:
             self.x = min(self.x + SHIP_SPEED, self.target_x)
         elif self.x > self.target_x:
             self.x = max(self.x - SHIP_SPEED, self.target_x)
+
+        # Decrement shoot cooldown
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
 
     def draw(self, draw: ImageDraw.ImageDraw, context: "RenderContext") -> None:
         """Draw the ship below the grid."""
@@ -171,17 +180,16 @@ class GameState(Drawable):
         Args:
             contribution_data: The GitHub contribution data
         """
-        self.contribution_data = contribution_data
         self.ship = Ship(self)
         self.enemies: List[Enemy] = []
         self.bullets: List[Bullet] = []
 
         # Initialize enemies from contribution data
-        self._initialize_enemies()
+        self._initialize_enemies(contribution_data)
 
-    def _initialize_enemies(self):
+    def _initialize_enemies(self, contribution_data: ContributionData):
         """Create enemies based on contribution levels."""
-        weeks = self.contribution_data["weeks"]
+        weeks = contribution_data["weeks"]
         for week_idx, week in enumerate(weeks):
             for day_idx, day in enumerate(week["days"]):
                 level = day["level"]
@@ -192,18 +200,19 @@ class GameState(Drawable):
 
     def shoot(self) -> None:
         """
-        Ship shoots a bullet at target position.
+        Ship shoots a bullet and starts cooldown timer.
         """
         bullet = Bullet(int(self.ship.x), game_state=self)
         self.bullets.append(bullet)
+        self.ship.shoot_cooldown = SHIP_SHOOT_COOLDOWN_FRAMES
 
     def is_complete(self) -> bool:
         """Check if game is complete (all enemies destroyed)."""
         return len(self.enemies) == 0
 
     def can_take_action(self) -> bool:
-        """Check if ship can take an action (not moving)."""
-        return not self.ship.is_moving()
+        """Check if ship can take an action (not moving and can shoot)."""
+        return not self.ship.is_moving() and self.ship.can_shoot()
 
     def animate(self) -> None:
         """Update all game objects for next frame."""
